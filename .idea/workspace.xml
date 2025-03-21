@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="3f0c6577-f03f-47e8-8e67-3e13a62156db" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Interface" />
+        <option value="Class" />
+        <option value="Record" />
+      </list>
+    </option>
+  </component>
+  <component name="JpbToolWindowState">
+    <option name="isToolWindowVisible" value="false" />
+  </component>
+  <component name="MavenRunner">
+    <option name="skipTests" value="true" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6
+}</component>
+  <component name="ProjectId" id="2ubeVNDyHf7XgjSfHIUspRwD92G" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.ApportionmentServiceApplication.executor&quot;: &quot;Run&quot;,
+    &quot;Application.CalculationServiceApplication.executor&quot;: &quot;Run&quot;,
+    &quot;Application.Start Apportionment.executor&quot;: &quot;Run&quot;,
+    &quot;Application.Start Calculation.executor&quot;: &quot;Run&quot;,
+    &quot;Maven. [org.apache.maven.plugins:maven-archetype-plugin:RELEASE:generate].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.Calculation_Service [clean].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.Calculation_Service [package].executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/yonlero/Projects/Business_Calculation/Calculation Service&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Libraries&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/Apportionment Service/src/main/resources" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/init-scripts" />
+      <recent name="$PROJECT_DIR$/Apportionment Service/src/main/java/br" />
+    </key>
+  </component>
+  <component name="RunDashboard">
+    <option name="configurationTypes">
+      <set>
+        <option value="Application" />
+      </set>
+    </option>
+  </component>
+  <component name="RunManager" selected="Application.Start Calculation">
+    <configuration name="Start Apportionment" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="br.com.yonlero.apportionment.service.ApportionmentServiceApplication" />
+      <module name="Apportionment_Service" />
+      <option name="VM_PARAMETERS" value="-Dspring.output.ansi.enabled=ALWAYS -Dspring.profiles.active=dev" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="br.com.yonlero.apportionment.service.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Start Calculation" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="br.com.yonlero.calculation.service.CalculationServiceApplication" />
+      <module name="Calculation_Service" />
+      <option name="VM_PARAMETERS" value="-Dspring.output.ansi.enabled=ALWAYS -Dspring.profiles.active=dev" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="br.com.yonlero.calculation.service.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="Application" factoryName="Application">
+      <option name="VM_PARAMETERS" value="-Dspring.output.ansi.enabled=ALWAYS" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="Application.Start Apportionment" />
+      <item itemvalue="Application.Start Calculation" />
+    </list>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="3f0c6577-f03f-47e8-8e67-3e13a62156db" name="Changes" comment="" />
+      <created>1742521724045</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1742521724045</updated>
+    </task>
+    <servers />
+  </component>
+</project>
