@@ -1,6 +1,6 @@
 package br.com.yonlero.calculation.service.infrastructure.adapter;
 
-import br.com.yonlero.calculation.service.domain.enums.KafkaTopics;
+import br.com.yonlero.calculation.service.domain.model.KafkaTopics;
 import br.com.yonlero.calculation.service.port.input.KafkaConsumerPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;

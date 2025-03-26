@@ -1,4 +1,4 @@
-package br.com.yonlero.calculation.service.domain.enums;
+package br.com.yonlero.calculation.service.domain.model;
 
 public class KafkaTopics {
     public static final String CALCULATION_STARTED = "CALCULATE_STARTED";

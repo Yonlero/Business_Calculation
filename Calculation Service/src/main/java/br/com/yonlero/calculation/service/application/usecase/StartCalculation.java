@@ -1,6 +1,6 @@
 package br.com.yonlero.calculation.service.application.usecase;
 
-import br.com.yonlero.calculation.service.domain.enums.KafkaTopics;
+import br.com.yonlero.calculation.service.domain.model.KafkaTopics;
 import br.com.yonlero.calculation.service.domain.model.Calculation;
 import br.com.yonlero.calculation.service.infrastructure.entity.CalculationJPA;
 import br.com.yonlero.calculation.service.infrastructure.repository.CalculationRepository;
