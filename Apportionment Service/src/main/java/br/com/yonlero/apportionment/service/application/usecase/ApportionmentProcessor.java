@@ -4,12 +4,20 @@ import br.com.yonlero.apportionment.service.domain.model.Apportionment;
 import br.com.yonlero.apportionment.service.domain.model.ValueDistribution;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.UUID;
 
 @Slf4j
 public class ApportionmentProcessor {
-    private Map<UUID, Apportionment> apportionmentsById = new HashMap<>();
-    private Map<UUID, List<UUID>> adjacencyList = new HashMap<>();
+    private final Map<UUID, Apportionment> apportionmentsById = new HashMap<>();
+    private final Map<UUID, List<UUID>> adjacencyList = new HashMap<>();
+    private final Map<UUID, Integer> inDegree = new HashMap<>();
 
     public void addApportionment(Apportionment apportionment) {
         apportionmentsById.put(apportionment.getId(), apportionment);
@@ -23,27 +31,18 @@ public class ApportionmentProcessor {
     }
 
     public List<UUID> getExecutionOrder() {
-        Map<UUID, Integer> inDegree = new HashMap<>();
-        for (UUID id : apportionmentsById.keySet()) {
-            inDegree.put(id, 0);
-        }
-        for (List<UUID> neighbors : adjacencyList.values()) {
-            for (UUID neighbor : neighbors) {
-                inDegree.put(neighbor, inDegree.getOrDefault(neighbor, 0) + 1);
-            }
-        }
-
         Queue<UUID> queue = new LinkedList<>();
-        for (UUID id : inDegree.keySet()) {
+        List<UUID> executionOrder = new ArrayList<>();
+
+        for (UUID id : apportionmentsById.keySet()) {
             if (inDegree.get(id) == 0) {
                 queue.add(id);
             }
         }
 
-        List<UUID> order = new ArrayList<>();
         while (!queue.isEmpty()) {
             UUID current = queue.poll();
-            order.add(current);
+            executionOrder.add(current);
 
             for (UUID neighbor : adjacencyList.getOrDefault(current, Collections.emptyList())) {
                 inDegree.put(neighbor, inDegree.get(neighbor) - 1);
@@ -53,11 +52,11 @@ public class ApportionmentProcessor {
             }
         }
 
-        if (order.size() != apportionmentsById.size()) {
-            throw new IllegalStateException("Circular reference detected in the apportionment graph.");
+        if (executionOrder.size() != apportionmentsById.size()) {
+            throw new IllegalStateException("Circular reference detected in the allocation graph.");
         }
 
-        return order;
+        return executionOrder;
     }
 
     public void processAll() {
