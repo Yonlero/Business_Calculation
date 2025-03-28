@@ -5,11 +5,11 @@ import br.com.yonlero.calculation.service.domain.model.Calculation;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public record CalculationOutgoing(UUID id, LocalDate startDate, LocalDate endDate, UUID userId, String status,
-                                  UUID correlationId) {
+public record CalculationKafka(UUID id, LocalDate startDate, LocalDate endDate, UUID userId, String status,
+                               UUID correlationId) {
 
-    public static CalculationOutgoing fromDomain(Calculation calculation) {
-        return new CalculationOutgoing(
+    public static CalculationKafka fromDomain(Calculation calculation) {
+        return new CalculationKafka(
                 calculation.getId(),
                 calculation.getStartDate(),
                 calculation.getEndDate(),

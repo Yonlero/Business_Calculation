@@ -15,7 +15,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d
-    restart: always
 
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
@@ -55,6 +54,14 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     ports:
       - "9090:8080"
+    networks:
+      - business_network
+
+  redis:
+    image: redis:latest
+    container_name: Redis
+    ports:
+      - "6379:6379"
     networks:
       - business_network
 

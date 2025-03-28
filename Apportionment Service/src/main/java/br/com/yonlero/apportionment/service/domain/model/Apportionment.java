@@ -1,5 +1,6 @@
 package br.com.yonlero.apportionment.service.domain.model;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Month;
 import java.util.ArrayList;
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class Apportionment {
+public class Apportionment implements Serializable {
     private UUID id;
     private String account;
     private String costCenter;
