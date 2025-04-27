@@ -11,11 +11,17 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: none
     show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  sql:
+    init:
+      mode: always
+      platform: postgres
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
   kafka:
     bootstrap-servers: 172.17.0.1:9093
     consumer:
@@ -31,4 +37,9 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-
+  data:
+    redis:
+      host: 172.17.0.1
+      port: 6379
+  cache:
+    type: REDIS

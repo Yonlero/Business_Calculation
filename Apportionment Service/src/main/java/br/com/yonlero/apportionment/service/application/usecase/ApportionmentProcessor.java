@@ -32,6 +32,7 @@ public class ApportionmentProcessor {
     private final KafkaProducerPort kafkaProducerPort;
     private final RedisService redisService;
 
+    //TODO Remove Global variables to save memory
     private Map<UUID, Apportionment> apportionmentsById = new ConcurrentHashMap<>();
     private Map<UUID, List<UUID>> adjacencyList = new ConcurrentHashMap<>();
     private Map<UUID, Integer> inDegree = new ConcurrentHashMap<>();

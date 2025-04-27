@@ -1,4 +1,4 @@
-package br.com.yonlero.apportionment.service.infrastructure.configuration;
+package br.com.yonlero.calculation.service.infrastructure.configuration;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -18,7 +18,7 @@ public class RedisConfiguration {
     private final CacheProperties cacheProperties;
 
     @Bean
-    public RedisStandaloneConfiguration redisStandaloneConfiguration(){
+    public RedisStandaloneConfiguration redisStandaloneConfiguration() {
         var configuration = new RedisStandaloneConfiguration();
         configuration.setPassword(cacheProperties.getPassword());
         return configuration;
