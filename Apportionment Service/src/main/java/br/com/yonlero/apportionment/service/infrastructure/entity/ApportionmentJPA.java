@@ -1,8 +1,10 @@
 package br.com.yonlero.apportionment.service.infrastructure.entity;
 
 import br.com.yonlero.apportionment.service.domain.model.Apportionment;
+import br.com.yonlero.apportionment.service.infrastructure.converters.YearMonthIntegerConverter;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -11,14 +13,17 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Month;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Getter
+@Setter
 @NoArgsConstructor
 @Table(name = "apportionments")
 public class ApportionmentJPA {
@@ -33,7 +38,8 @@ public class ApportionmentJPA {
     @Column(nullable = false)
     private String businessUnit;
     @Column(nullable = false)
-    private int year;
+    @Convert(converter = YearMonthIntegerConverter.class)
+    private YearMonth yearMonth;
     @Column
     private UUID originId;
     @Column(nullable = false)
@@ -47,7 +53,7 @@ public class ApportionmentJPA {
         this.account = apportionment.getAccount();
         this.costCenter = apportionment.getCostCenter();
         this.businessUnit = apportionment.getBusinessUnit();
-        this.year = apportionment.getYear();
+        this.yearMonth = apportionment.getYearMonth();
         this.originId = apportionment.getOriginId();
         this.isOrigin = apportionment.isOrigin();
 
@@ -73,7 +79,7 @@ public class ApportionmentJPA {
                 this.getCostCenter(),
                 this.getBusinessUnit(),
                 this.getOriginId(),
-                this.getYear(),
+                this.getYearMonth(),
                 this.isOrigin());
 
         if (this.getValueDistributions() != null) {

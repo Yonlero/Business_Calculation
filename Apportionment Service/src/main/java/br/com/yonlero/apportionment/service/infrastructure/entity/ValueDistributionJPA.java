@@ -36,6 +36,6 @@ public class ValueDistributionJPA {
     @Column(nullable = false, precision = 3, scale = 16)
     private BigDecimal percentage;
 
-    @Column(nullable = false)
+    @Column(name = "destination_id", nullable = false)
     private UUID destinationId;
 }

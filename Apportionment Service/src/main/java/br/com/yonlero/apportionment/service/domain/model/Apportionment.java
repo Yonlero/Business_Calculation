@@ -3,6 +3,7 @@ package br.com.yonlero.apportionment.service.domain.model;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Month;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -11,11 +12,13 @@ import java.util.Map;
 import java.util.UUID;
 
 public class Apportionment implements Serializable {
+    private static final long serialVersionUID = 821957595166799487L;
+
     private UUID id;
     private String account;
     private String costCenter;
     private String businessUnit;
-    private int year;
+    private YearMonth yearMonth;
     private UUID originId;
     private boolean isOrigin;
 
@@ -23,12 +26,12 @@ public class Apportionment implements Serializable {
 
     private Map<Month, BigDecimal> totalPercentagesByMonth = new HashMap<>();
 
-    public Apportionment(UUID id, String account, String costCenter, String businessUnit, UUID originId, int year, boolean isOrigin) {
+    public Apportionment(UUID id, String account, String costCenter, String businessUnit, UUID originId, YearMonth yearMonth, boolean isOrigin) {
         this.id = id;
         this.account = account;
         this.costCenter = costCenter;
         this.businessUnit = businessUnit;
-        this.year = year;
+        this.yearMonth = yearMonth;
         this.originId = originId;
         this.isOrigin = isOrigin;
     }
@@ -73,8 +76,8 @@ public class Apportionment implements Serializable {
         return businessUnit;
     }
 
-    public int getYear() {
-        return year;
+    public YearMonth getYearMonth() {
+        return yearMonth;
     }
 
     public UUID getOriginId() {

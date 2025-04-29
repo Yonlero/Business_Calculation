@@ -19,6 +19,9 @@ spring:
   sql:
     init:
       mode: always
+      platform: postgres
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
   kafka:
     bootstrap-servers: 172.17.0.1:9093
     consumer:

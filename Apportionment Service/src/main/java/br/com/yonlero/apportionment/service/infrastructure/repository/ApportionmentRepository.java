@@ -4,8 +4,12 @@ import br.com.yonlero.apportionment.service.infrastructure.entity.ApportionmentJ
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.YearMonth;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
 public interface ApportionmentRepository extends JpaRepository<ApportionmentJPA, UUID> {
+
+    List<ApportionmentJPA> findAllByYearMonthBetween(YearMonth startDate, YearMonth endDate);
 }

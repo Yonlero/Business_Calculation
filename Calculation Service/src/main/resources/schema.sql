@@ -1,3 +1,6 @@
+DROP TABLE IF EXISTS calculations CASCADE;
+DROP TABLE IF EXISTS budget_opening CASCADE;
+
 CREATE TABLE IF NOT EXISTS calculations (
     id UUID PRIMARY KEY,
     start_date DATE NOT NULL,

@@ -6,12 +6,13 @@ import br.com.yonlero.apportionment.service.interfaceadapter.dto.ValueDistributi
 
 import java.math.BigDecimal;
 import java.time.Month;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public record ApportionmentResponse(UUID id, String account, String costCenter, String businessUnit, int year,
+public record ApportionmentResponse(UUID id, String account, String costCenter, String businessUnit, YearMonth yearMonth,
                                     UUID originId, boolean isOrigin, List<ValueDistributionDTO> values) {
 
     public static ApportionmentResponse fromDomain(Apportionment apportionment) {
@@ -33,7 +34,7 @@ public record ApportionmentResponse(UUID id, String account, String costCenter, 
                 apportionment.getAccount(),
                 apportionment.getCostCenter(),
                 apportionment.getBusinessUnit(),
-                apportionment.getYear(),
+                apportionment.getYearMonth(),
                 apportionment.getOriginId(),
                 apportionment.isOrigin(),
                 values

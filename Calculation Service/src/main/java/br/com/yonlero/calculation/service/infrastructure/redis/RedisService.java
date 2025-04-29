@@ -4,22 +4,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.io.Serializable;
-
 @Service
 public class RedisService {
-    private final RedisTemplate<String, Serializable> redisTemplate;
+
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Autowired
-    public RedisService(RedisTemplate<String, Serializable> redisTemplate) {
+    public RedisService(RedisTemplate<String, Object> redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
 
-    public void put(String key, Serializable value) {
+    public void put(String key, Object value) {
         redisTemplate.opsForValue().set(key, value);
     }
 
-    public <T extends Serializable> T get(String key) {
+    @SuppressWarnings("unchecked")
+    public <T> T get(String key) {
         return (T) redisTemplate.opsForValue().get(key);
     }
 }

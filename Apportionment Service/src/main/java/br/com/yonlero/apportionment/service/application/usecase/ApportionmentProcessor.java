@@ -6,12 +6,15 @@ import br.com.yonlero.apportionment.service.domain.model.ValueDistribution;
 import br.com.yonlero.apportionment.service.infrastructure.entity.ApportionmentJPA;
 import br.com.yonlero.apportionment.service.infrastructure.redis.RedisService;
 import br.com.yonlero.apportionment.service.infrastructure.repository.ApportionmentRepository;
+import br.com.yonlero.apportionment.service.interfaceadapter.dto.cache.BudgetOpeningCacheDTO;
+import br.com.yonlero.apportionment.service.interfaceadapter.dto.kafka.incoming.CalculationKafka;
 import br.com.yonlero.apportionment.service.port.output.KafkaProducerPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -32,7 +35,11 @@ public class ApportionmentProcessor {
     private final KafkaProducerPort kafkaProducerPort;
     private final RedisService redisService;
 
-    //TODO Remove Global variables to save memory
+    /**TODO
+     *  Remove Global variables
+     *  Change strategy to use cache and db
+     *  Add a number in each apportionment, and only apportionment most used (high number) will be in memory/cache to fast consulting/update
+     */
     private Map<UUID, Apportionment> apportionmentsById = new ConcurrentHashMap<>();
     private Map<UUID, List<UUID>> adjacencyList = new ConcurrentHashMap<>();
     private Map<UUID, Integer> inDegree = new ConcurrentHashMap<>();
@@ -81,15 +88,20 @@ public class ApportionmentProcessor {
     }
 
     @Transactional
-    public void processAll() {
+    public void processAllToCalculation(CalculationKafka calculationKafka) {
         List<UUID> executionOrder = getExecutionOrder();
-        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id)));
+        initializeFromDatabase(calculationKafka);
+
+        List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening.toProcess");
+
+        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id), budgetOpeningInCache));
         kafkaProducerPort.sendApportionmentStatusProcess(KafkaTopics.APPORTIONMENT_CALCULATION_FINISHED, null);
     }
 
-    private void processApportionment(Apportionment apportionment) {
+    private void processApportionment(Apportionment apportionment, List<BudgetOpeningCacheDTO> budgetOpeningCached) {
         log.info("Actual Apportionment on Process: {}", apportionment.getId());
-        // TODO Implement method to value update.
+        log.info("First Budget Opening: {}", budgetOpeningCached.getFirst());
+        // TODO Implement method to update BudgetOpening values.
     }
 
     public void clearDataStructures() {
@@ -98,8 +110,8 @@ public class ApportionmentProcessor {
         inDegree.clear();
     }
 
-    public Apportionment getApportionmentFromCache(UUID id) {
-        return redisService.get(id.toString());
+    public Apportionment getApportionmentFromCache(String id) {
+        return redisService.get(id);
     }
 
     @Transactional
@@ -130,6 +142,13 @@ public class ApportionmentProcessor {
 
         addApportionment(apportionment);
 
+        List<UUID> executionOrder = getExecutionOrder(apportionment, newId);
+        List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.get("#calculation.budget_opening.toProcess");
+
+        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id), budgetOpeningInCache));
+    }
+
+    private List<UUID> getExecutionOrder(Apportionment apportionment, UUID newId) {
         Set<UUID> affectedVertices = new HashSet<>();
         affectedVertices.add(newId);
 
@@ -144,13 +163,15 @@ public class ApportionmentProcessor {
 
         List<UUID> executionOrder = getExecutionOrder();
         executionOrder.retainAll(affectedVertices);
-
-        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id)));
+        return executionOrder;
     }
 
     @Transactional
-    public void initializeFromDatabase() {
-        List<Apportionment> allApportionments = apportionmentRepository.findAll().stream().map(ApportionmentJPA::toDomain).toList();
+    public void initializeFromDatabase(CalculationKafka calculationKafka) {
+        List<Apportionment> allApportionments = apportionmentRepository.findAllByYearMonthBetween(
+                YearMonth.from(calculationKafka.startDate()), YearMonth.from(calculationKafka.endDate()))
+                .stream().map(ApportionmentJPA::toDomain).toList();
+
         for (Apportionment apportionment : allApportionments) {
             apportionmentsById.put(apportionment.getId(), apportionment);
             adjacencyList.putIfAbsent(apportionment.getId(), new ArrayList<>());
