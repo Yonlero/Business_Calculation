@@ -14,9 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.Month;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -46,12 +49,21 @@ public class ApportionmentProcessor {
 
     @Transactional
     public void addApportionment(Apportionment apportionment) {
-        apportionmentsById.put(apportionment.getId(), apportionment);
-        adjacencyList.putIfAbsent(apportionment.getId(), new ArrayList<>());
+        UUID id = apportionment.getId();
+
+        apportionmentsById.put(id, apportionment);
+        adjacencyList.putIfAbsent(id, new ArrayList<>());
+
+        inDegree.putIfAbsent(id, 0);
 
         for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
             for (ValueDistribution distribution : distributions) {
-                adjacencyList.get(apportionment.getId()).add(distribution.getDestinationId());
+                UUID destinationId = distribution.getDestinationId();
+
+                adjacencyList.get(id).add(destinationId);
+
+                inDegree.putIfAbsent(destinationId, 0);
+                inDegree.put(destinationId, inDegree.get(destinationId) + 1);
             }
         }
 
@@ -63,7 +75,7 @@ public class ApportionmentProcessor {
         List<UUID> executionOrder = new ArrayList<>();
 
         for (UUID id : apportionmentsById.keySet()) {
-            if (inDegree.get(id) == 0) {
+            if (inDegree.getOrDefault(id, 0) == 0) {
                 queue.add(id);
             }
         }
@@ -73,8 +85,9 @@ public class ApportionmentProcessor {
             executionOrder.add(current);
 
             for (UUID neighbor : adjacencyList.getOrDefault(current, Collections.emptyList())) {
-                inDegree.put(neighbor, inDegree.get(neighbor) - 1);
-                if (inDegree.get(neighbor) == 0) {
+                int updatedInDegree = inDegree.get(neighbor) - 1;
+                inDegree.put(neighbor, updatedInDegree);
+                if (updatedInDegree == 0) {
                     queue.add(neighbor);
                 }
             }
@@ -89,19 +102,64 @@ public class ApportionmentProcessor {
 
     @Transactional
     public void processAllToCalculation(CalculationKafka calculationKafka) {
-        List<UUID> executionOrder = getExecutionOrder();
         initializeFromDatabase(calculationKafka);
+        List<UUID> executionOrder = getExecutionOrder();
 
         List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening.toProcess");
+        Map<String, BudgetOpeningCacheDTO> budgetOpeningMapped = new HashMap<>();
 
-        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id), budgetOpeningInCache));
+        for (BudgetOpeningCacheDTO budgetOpeningCacheDTO : budgetOpeningInCache) {
+            budgetOpeningMapped.put(buildBudgetKey(budgetOpeningCacheDTO), budgetOpeningCacheDTO);
+        }
+
+        for (UUID id : executionOrder) {
+            processApportionment(id, apportionmentsById, budgetOpeningMapped);
+        }
+        //TODO Put updated budgetOpeningMap in Cache -> Get this in another service and Persist
         kafkaProducerPort.sendApportionmentStatusProcess(KafkaTopics.APPORTIONMENT_CALCULATION_FINISHED, null);
     }
 
-    private void processApportionment(Apportionment apportionment, List<BudgetOpeningCacheDTO> budgetOpeningCached) {
-        log.info("Actual Apportionment on Process: {}", apportionment.getId());
-        log.info("First Budget Opening: {}", budgetOpeningCached.getFirst());
-        // TODO Implement method to update BudgetOpening values.
+    private String buildBudgetKey(BudgetOpeningCacheDTO budgetOpeningCacheDTO) {
+        return String.format("%s:%s:%s:%s", budgetOpeningCacheDTO.getAccount(),
+                budgetOpeningCacheDTO.getCostCenter(), budgetOpeningCacheDTO.getBusinessUnit(),
+                budgetOpeningCacheDTO.getYearMonth());
+    }
+
+    private String buildApportionmentKey(Apportionment apportionment) {
+        return String.format("%s:%s:%s:%s", apportionment.getAccount(),
+                apportionment.getCostCenter(), apportionment.getBusinessUnit(),
+                apportionment.getYearMonth());
+    }
+
+    private void processApportionment(UUID apportionmentIdOnProcess, Map<UUID, Apportionment> apportionmentMap, Map<String, BudgetOpeningCacheDTO> budgetOpeningMap) {
+        Apportionment actualApportionmentOnProcess = apportionmentMap.get(apportionmentIdOnProcess);
+        List<ValueDistribution> valuesByMonthToDestination;
+        Month monthInProcess = actualApportionmentOnProcess.getYearMonth().getMonth();
+        Apportionment originApportionment = actualApportionmentOnProcess;
+
+        if (actualApportionmentOnProcess.getOriginId() != null) {
+            originApportionment = apportionmentMap.get(actualApportionmentOnProcess.getOriginId());
+            valuesByMonthToDestination = originApportionment.getValuesByMonth().get(monthInProcess).stream()
+                    .filter(x -> x.getDestinationId().equals(actualApportionmentOnProcess.getId()))
+                    .toList();
+        } else {
+            valuesByMonthToDestination = originApportionment.getValuesByMonth().get(monthInProcess);
+        }
+
+        BudgetOpeningCacheDTO originBudgetOpening = budgetOpeningMap.get(buildApportionmentKey(originApportionment));
+
+
+        for (ValueDistribution valueToDistribution : valuesByMonthToDestination) {
+            Apportionment apportionmentDestination = apportionmentMap.get(valueToDistribution.getDestinationId());
+            String destinationApportionment = buildApportionmentKey(apportionmentDestination);
+
+            BudgetOpeningCacheDTO budgetDestination = budgetOpeningMap.get(destinationApportionment);
+            BigDecimal valueToDestination = originBudgetOpening.getProjectedValue().multiply(valueToDistribution.getPercentage());
+
+            originBudgetOpening.setProjectedValue(originBudgetOpening.getProjectedValue().subtract(valueToDestination));
+            budgetDestination.setApportionmentValue(budgetDestination.getApportionmentValue().add(valueToDestination));
+        }
+
     }
 
     public void clearDataStructures() {
@@ -132,21 +190,27 @@ public class ApportionmentProcessor {
         return apportionment;
     }
 
-    @Transactional
-    public void recalculateForNewApportionment(Apportionment apportionment) {
-        UUID newId = apportionment.getId();
-        if (apportionmentsById.containsKey(newId)) {
-            log.warn("Apportionment with ID {} already exists. Skipping recalculation.", newId);
-            return;
-        }
-
-        addApportionment(apportionment);
-
-        List<UUID> executionOrder = getExecutionOrder(apportionment, newId);
-        List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.get("#calculation.budget_opening.toProcess");
-
-        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id), budgetOpeningInCache));
-    }
+//    @Transactional
+//    public void recalculateForNewApportionment(Apportionment apportionment) {
+//        UUID newId = apportionment.getId();
+//        if (apportionmentsById.containsKey(newId)) {
+//            log.warn("Apportionment with ID {} already exists. Skipping recalculation.", newId);
+//            return;
+//        }
+//
+//        addApportionment(apportionment);
+//
+//        List<UUID> executionOrder = getExecutionOrder(apportionment, newId);
+//        List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.get("#calculation.budget_opening.toProcess");
+//
+//        Map<String, BudgetOpeningCacheDTO> budgetOpeningMapped = new HashMap<>();
+//
+//        for (BudgetOpeningCacheDTO budgetOpeningCacheDTO : budgetOpeningInCache) {
+//            budgetOpeningMapped.put(buildBudgetKey(budgetOpeningCacheDTO), budgetOpeningCacheDTO);
+//        }
+//
+//        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id), budgetOpeningMapped));
+//    }
 
     private List<UUID> getExecutionOrder(Apportionment apportionment, UUID newId) {
         Set<UUID> affectedVertices = new HashSet<>();
@@ -168,21 +232,18 @@ public class ApportionmentProcessor {
 
     @Transactional
     public void initializeFromDatabase(CalculationKafka calculationKafka) {
+        apportionmentsById.clear();
+        adjacencyList.clear();
+        inDegree.clear();
+
         List<Apportionment> allApportionments = apportionmentRepository.findAllByYearMonthBetween(
-                YearMonth.from(calculationKafka.startDate()), YearMonth.from(calculationKafka.endDate()))
-                .stream().map(ApportionmentJPA::toDomain).toList();
+                        YearMonth.from(calculationKafka.startDate()), YearMonth.from(calculationKafka.endDate()))
+                .stream()
+                .map(ApportionmentJPA::toDomain)
+                .toList();
 
-        for (Apportionment apportionment : allApportionments) {
-            apportionmentsById.put(apportionment.getId(), apportionment);
-            adjacencyList.putIfAbsent(apportionment.getId(), new ArrayList<>());
-
-            for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
-                for (ValueDistribution distribution : distributions) {
-                    adjacencyList.get(apportionment.getId()).add(distribution.getDestinationId());
-                }
-            }
-
-            redisService.put(apportionment.getId().toString(), apportionment);
+        for (Apportionment allApportionment : allApportionments) {
+            addApportionment(allApportionment);
         }
     }
 }
