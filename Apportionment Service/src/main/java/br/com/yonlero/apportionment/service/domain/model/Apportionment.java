@@ -52,6 +52,10 @@ public class Apportionment implements Serializable {
         return valuesByMonth.getOrDefault(month, Collections.emptyList());
     }
 
+    public List<ValueDistribution> getDistributions() {
+        return valuesByMonth.values().stream().flatMap(List::stream).toList() ;
+    }
+
     public void validateAllPercentages() {
         totalPercentagesByMonth.forEach((month, totalPercentage) -> {
             if (totalPercentage.compareTo(BigDecimal.valueOf(100)) > 0) {

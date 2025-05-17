@@ -19,16 +19,14 @@ import java.time.Month;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.Deque;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
 
 @Slf4j
 @Component
@@ -38,84 +36,112 @@ public class ApportionmentProcessor {
     private final KafkaProducerPort kafkaProducerPort;
     private final RedisService redisService;
 
-    /**TODO
+    /**
+     * TODO
      *  Remove Global variables
      *  Change strategy to use cache and db
      *  Add a number in each apportionment, and only apportionment most used (high number) will be in memory/cache to fast consulting/update
      */
-    private Map<UUID, Apportionment> apportionmentsById = new ConcurrentHashMap<>();
-    private Map<UUID, List<UUID>> adjacencyList = new ConcurrentHashMap<>();
-    private Map<UUID, Integer> inDegree = new ConcurrentHashMap<>();
+    private final Map<UUID, Apportionment> apportionmentsById = new ConcurrentHashMap<>();
+
+    // Graph: father -> son
+    private final Map<UUID, Set<UUID>> adjacencyList = new ConcurrentHashMap<>();
+
+    // Reverse graph: son -> father
+    private final Map<UUID, Set<UUID>> reverseAdjacencyList = new ConcurrentHashMap<>();
+
+    private final Map<UUID, Integer> inDegree = new ConcurrentHashMap<>();
 
     @Transactional
     public void addApportionment(Apportionment apportionment) {
         UUID id = apportionment.getId();
 
         apportionmentsById.put(id, apportionment);
-        adjacencyList.putIfAbsent(id, new ArrayList<>());
-
+        adjacencyList.putIfAbsent(id, new HashSet<>());
+        reverseAdjacencyList.putIfAbsent(id, new HashSet<>());
         inDegree.putIfAbsent(id, 0);
 
-        for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
-            for (ValueDistribution distribution : distributions) {
-                UUID destinationId = distribution.getDestinationId();
+        for (ValueDistribution distribution : apportionment.getDistributions()) {
+            UUID destinationId = distribution.getDestinationId();
 
-                adjacencyList.get(id).add(destinationId);
+            adjacencyList.putIfAbsent(destinationId, new HashSet<>());
+            reverseAdjacencyList.putIfAbsent(destinationId, new HashSet<>());
 
-                inDegree.putIfAbsent(destinationId, 0);
-                inDegree.put(destinationId, inDegree.get(destinationId) + 1);
-            }
+            adjacencyList.get(id).add(destinationId);
+            reverseAdjacencyList.get(destinationId).add(id);
+
+            inDegree.putIfAbsent(destinationId, 0);
+            inDegree.put(destinationId, inDegree.get(destinationId) + 1);
         }
-
-        redisService.put(apportionment.getId().toString(), apportionment);
     }
 
-    public List<UUID> getExecutionOrder() {
-        Queue<UUID> queue = new LinkedList<>();
-        List<UUID> executionOrder = new ArrayList<>();
+    public List<List<UUID>> getExecutionOrderGroupedByComponent() {
+        List<List<UUID>> allOrders = new ArrayList<>();
+        Set<UUID> visited = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        KahnAlgorithm kahnAlgorithm = new KahnAlgorithm(adjacencyList);
 
-        for (UUID id : apportionmentsById.keySet()) {
-            if (inDegree.getOrDefault(id, 0) == 0) {
-                queue.add(id);
+        for (UUID node : apportionmentsById.keySet()) {
+            if (!visited.contains(node)) {
+                Set<UUID> component = findComponent(node, visited);
+                List<UUID> order = kahnAlgorithm.topologicalSort(component);
+                allOrders.add(order);
             }
         }
+
+        return allOrders;
+    }
+
+    // Searching for components using interactive BFS.
+    private Set<UUID> findComponent(UUID start, Set<UUID> visited) {
+        Set<UUID> component = ConcurrentHashMap.newKeySet();
+        Deque<UUID> queue = new LinkedBlockingDeque<>();
+        queue.add(start);
+        visited.add(start);
+        component.add(start);
 
         while (!queue.isEmpty()) {
             UUID current = queue.poll();
-            executionOrder.add(current);
 
-            for (UUID neighbor : adjacencyList.getOrDefault(current, Collections.emptyList())) {
-                int updatedInDegree = inDegree.get(neighbor) - 1;
-                inDegree.put(neighbor, updatedInDegree);
-                if (updatedInDegree == 0) {
-                    queue.add(neighbor);
+            // Add sons to the queue
+            for (UUID child : adjacencyList.getOrDefault(current, Collections.emptySet())) {
+                if (!visited.contains(child)) {
+                    visited.add(child);
+                    component.add(child);
+                    queue.add(child);
+                }
+            }
+
+            // Add Father to the queue
+            for (UUID parent : reverseAdjacencyList.getOrDefault(current, Collections.emptySet())) {
+                if (!visited.contains(parent)) {
+                    visited.add(parent);
+                    component.add(parent);
+                    queue.add(parent);
                 }
             }
         }
 
-        if (executionOrder.size() != apportionmentsById.size()) {
-            throw new IllegalStateException("Circular reference detected in the allocation graph.");
-        }
-
-        return executionOrder;
+        return component;
     }
 
     @Transactional
     public void processAllToCalculation(CalculationKafka calculationKafka) {
         initializeFromDatabase(calculationKafka);
-        List<UUID> executionOrder = getExecutionOrder();
-
+        List<List<UUID>> executionOrder = this.getExecutionOrderGroupedByComponent();
         List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening.toProcess");
-        Map<String, BudgetOpeningCacheDTO> budgetOpeningMapped = new HashMap<>();
+        Map<String, BudgetOpeningCacheDTO> budgetOpeningMapped = new ConcurrentHashMap<>();
 
-        for (BudgetOpeningCacheDTO budgetOpeningCacheDTO : budgetOpeningInCache) {
-            budgetOpeningMapped.put(buildBudgetKey(budgetOpeningCacheDTO), budgetOpeningCacheDTO);
-        }
-
-        for (UUID id : executionOrder) {
-            processApportionment(id, apportionmentsById, budgetOpeningMapped);
-        }
         //TODO Put updated budgetOpeningMap in Cache -> Get this in another service and Persist
+        executionOrder.parallelStream().forEach(apportionmentGraph -> {
+            for (BudgetOpeningCacheDTO budgetOpeningCacheDTO : budgetOpeningInCache) {
+                budgetOpeningMapped.put(buildBudgetKey(budgetOpeningCacheDTO), budgetOpeningCacheDTO);
+            }
+
+            for (UUID id : apportionmentGraph) {
+                processApportionment(id, apportionmentsById, budgetOpeningMapped);
+            }
+        });
+
         kafkaProducerPort.sendApportionmentStatusProcess(KafkaTopics.APPORTIONMENT_CALCULATION_FINISHED, null);
     }
 
@@ -172,23 +198,23 @@ public class ApportionmentProcessor {
         return redisService.get(id);
     }
 
-    @Transactional
-    public Apportionment loadApportionmentFromDatabase(UUID id) {
-        Apportionment apportionment = Objects.requireNonNull(apportionmentRepository.findById(id).orElse(null)).toDomain();
-        if (apportionment != null) {
-            apportionmentsById.put(apportionment.getId(), apportionment);
-            adjacencyList.putIfAbsent(apportionment.getId(), new ArrayList<>());
-
-            for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
-                for (ValueDistribution distribution : distributions) {
-                    adjacencyList.get(apportionment.getId()).add(distribution.getDestinationId());
-                }
-            }
-
-            redisService.put(apportionment.getId().toString(), apportionment);
-        }
-        return apportionment;
-    }
+//    @Transactional
+//    public Apportionment loadApportionmentFromDatabase(UUID id) {
+//        Apportionment apportionment = Objects.requireNonNull(apportionmentRepository.findById(id).orElse(null)).toDomain();
+//        if (apportionment != null) {
+//            apportionmentsById.put(apportionment.getId(), apportionment);
+//            adjacencyList.putIfAbsent(apportionment.getId(), new ArrayList<>());
+//
+//            for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
+//                for (ValueDistribution distribution : distributions) {
+//                    adjacencyList.get(apportionment.getId()).add(distribution.getDestinationId());
+//                }
+//            }
+//
+//            redisService.put(apportionment.getId().toString(), apportionment);
+//        }
+//        return apportionment;
+//    }
 
 //    @Transactional
 //    public void recalculateForNewApportionment(Apportionment apportionment) {
@@ -212,23 +238,23 @@ public class ApportionmentProcessor {
 //        executionOrder.parallelStream().forEach(id -> processApportionment(apportionmentsById.get(id), budgetOpeningMapped));
 //    }
 
-    private List<UUID> getExecutionOrder(Apportionment apportionment, UUID newId) {
-        Set<UUID> affectedVertices = new HashSet<>();
-        affectedVertices.add(newId);
-
-        for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
-            for (ValueDistribution distribution : distributions) {
-                UUID destinationId = distribution.getDestinationId();
-                if (apportionmentsById.containsKey(destinationId)) {
-                    affectedVertices.add(destinationId);
-                }
-            }
-        }
-
-        List<UUID> executionOrder = getExecutionOrder();
-        executionOrder.retainAll(affectedVertices);
-        return executionOrder;
-    }
+//    private List<UUID> getExecutionOrder(Apportionment apportionment, UUID newId) {
+//        Set<UUID> affectedVertices = new HashSet<>();
+//        affectedVertices.add(newId);
+//
+//        for (List<ValueDistribution> distributions : apportionment.getValuesByMonth().values()) {
+//            for (ValueDistribution distribution : distributions) {
+//                UUID destinationId = distribution.getDestinationId();
+//                if (apportionmentsById.containsKey(destinationId)) {
+//                    affectedVertices.add(destinationId);
+//                }
+//            }
+//        }
+//
+//        List<UUID> executionOrder = getExecutionOrder();
+//        executionOrder.retainAll(affectedVertices);
+//        return executionOrder;
+//    }
 
     @Transactional
     public void initializeFromDatabase(CalculationKafka calculationKafka) {
@@ -236,14 +262,14 @@ public class ApportionmentProcessor {
         adjacencyList.clear();
         inDegree.clear();
 
-        List<Apportionment> allApportionments = apportionmentRepository.findAllByYearMonthBetween(
+        List<Apportionment> allApportionment = apportionmentRepository.findAllByYearMonthBetween(
                         YearMonth.from(calculationKafka.startDate()), YearMonth.from(calculationKafka.endDate()))
                 .stream()
                 .map(ApportionmentJPA::toDomain)
                 .toList();
 
-        for (Apportionment allApportionment : allApportionments) {
-            addApportionment(allApportionment);
+        for (Apportionment apportionment : allApportionment) {
+            addApportionment(apportionment);
         }
     }
 }
