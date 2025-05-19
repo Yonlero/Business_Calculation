@@ -9,12 +9,14 @@ import br.com.yonlero.apportionment.service.infrastructure.repository.Apportionm
 import br.com.yonlero.apportionment.service.interfaceadapter.dto.cache.BudgetOpeningCacheDTO;
 import br.com.yonlero.apportionment.service.interfaceadapter.dto.kafka.incoming.CalculationKafka;
 import br.com.yonlero.apportionment.service.port.output.KafkaProducerPort;
+import br.com.yonlero.apportionment.service.util.MonthRangeGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Month;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -130,21 +132,25 @@ public class ApportionmentProcessor {
         initializeFromDatabase(calculationKafka);
         List<List<UUID>> executionOrder = this.getExecutionOrderGroupedByComponent();
         List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening.toProcess");
+        List<YearMonth> periodToProcess = MonthRangeGenerator.generateYearMonths(calculationKafka.startDate(), calculationKafka.endDate());
 
         executionOrder.parallelStream().forEach(apportionmentGraph -> {
             // Each component will be processed in a local cache to avoid concurrency problems
             Map<String, BudgetOpeningCacheDTO> localBudgetMap = new HashMap<>();
 
-            for (BudgetOpeningCacheDTO dto : budgetOpeningInCache) {
-                localBudgetMap.put(buildBudgetKey(dto), dto);
+            for (YearMonth period : periodToProcess) {
+                Map<UUID, List<ValueDistribution>> groupedByOrigin = new HashMap<>();
+
+                for (BudgetOpeningCacheDTO dto : budgetOpeningInCache) {
+                    localBudgetMap.put(buildBudgetKey(dto), dto);
+                }
+
+                // Group destinations by origin
+                groupDestinationsByOrigin(apportionmentGraph, groupedByOrigin, period.getMonth());
+
+                // Process Grouped destinations by origin
+                processDestinationByOrigin(groupedByOrigin, localBudgetMap, period);
             }
-
-            // Group destinations by origin
-            Map<UUID, List<ValueDistribution>> groupedByOrigin = new HashMap<>();
-            groupDestinationsByOrigin(apportionmentGraph, groupedByOrigin);
-
-            // Process Grouped destinations by origin
-            processDestinationByOrigin(groupedByOrigin, localBudgetMap);
 
             // Update Global cache
             updateRedisWithLocalMap(localBudgetMap);
@@ -153,20 +159,20 @@ public class ApportionmentProcessor {
         kafkaProducerPort.sendApportionmentStatusProcess(KafkaTopics.APPORTIONMENT_CALCULATION_FINISHED, null);
     }
 
-    private void groupDestinationsByOrigin(List<UUID> apportionmentGraph, Map<UUID, List<ValueDistribution>> groupedByOrigin) {
+    private void groupDestinationsByOrigin(List<UUID> apportionmentGraph, Map<UUID, List<ValueDistribution>> groupedByOrigin, Month actualMonth) {
         for (UUID id : apportionmentGraph) {
             Apportionment ap = apportionmentsById.get(id);
 
             UUID originId = Optional.ofNullable(ap.getOriginId()).orElse(ap.getId());
-            groupedByOrigin.computeIfAbsent(originId, k -> new ArrayList<>()).addAll(ap.getDistributions());
+            groupedByOrigin.computeIfAbsent(originId, k -> new ArrayList<>()).addAll(ap.getDistributionsForMonth(actualMonth));
         }
     }
 
-    private void processDestinationByOrigin(Map<UUID, List<ValueDistribution>> groupedByOrigin, Map<String, BudgetOpeningCacheDTO> localBudgetMap) {
+    private void processDestinationByOrigin(Map<UUID, List<ValueDistribution>> groupedByOrigin, Map<String, BudgetOpeningCacheDTO> localBudgetMap, YearMonth actualPeriod) {
         for (Map.Entry<UUID, List<ValueDistribution>> entry : groupedByOrigin.entrySet()) {
             UUID originId = entry.getKey();
             List<ValueDistribution> distributions = entry.getValue();
-            processGroupedApportionment(originId, distributions, apportionmentsById, localBudgetMap);
+            processGroupedApportionment(originId, distributions, apportionmentsById, localBudgetMap, actualPeriod);
         }
     }
 
@@ -178,42 +184,44 @@ public class ApportionmentProcessor {
 
     private void processGroupedApportionment(UUID originId, List<ValueDistribution> distributions,
                                              Map<UUID, Apportionment> apportionmentMap,
-                                             Map<String, BudgetOpeningCacheDTO> budgetOpeningMap) {
+                                             Map<String, BudgetOpeningCacheDTO> budgetOpeningMap, YearMonth actualPeriod) {
         Apportionment origin = apportionmentMap.get(originId);
 
-        BudgetOpeningCacheDTO originBudget = budgetOpeningMap.get(buildApportionmentKey(origin));
+        BudgetOpeningCacheDTO originBudget = budgetOpeningMap.get(buildApportionmentKeyWithCustomPeriod(origin, actualPeriod));
 
-        BigDecimal totalPercentage = BigDecimal.ZERO;
-        Map<UUID, BigDecimal> distributionValues = new HashMap<>();
+        if (originBudget != null) {
+            BigDecimal totalPercentage = BigDecimal.ZERO;
+            Map<UUID, BigDecimal> distributionValues = new HashMap<>();
 
-        for (ValueDistribution dist : distributions) {
-            BigDecimal percentage = dist.getPercentage();
-            totalPercentage = totalPercentage.add(percentage);
+            for (ValueDistribution dist : distributions) {
+                BigDecimal percentage = dist.getPercentage();
+                totalPercentage = totalPercentage.add(percentage);
 
-            BigDecimal value = originBudget.getProjectedValue().multiply(percentage);
-            distributionValues.put(dist.getDestinationId(), value);
-        }
+                BigDecimal value = originBudget.getProjectedValue().multiply(percentage);
+                distributionValues.put(dist.getDestinationId(), value);
+            }
 
-        if (totalPercentage.compareTo(BigDecimal.ONE) > 0) {
-            throw new IllegalStateException("Total percentage exceed 100% " + originId);
-        }
+            if (totalPercentage.compareTo(BigDecimal.ONE) > 0) {
+                throw new IllegalStateException("Total percentage exceed 100% " + originId);
+            }
 
-        BigDecimal totalDistributed = originBudget.getProjectedValue().multiply(totalPercentage);
-        BigDecimal negativeTotal = totalDistributed.multiply(new BigDecimal("-1"));
+            BigDecimal totalDistributed = originBudget.getProjectedValue().multiply(totalPercentage);
+            BigDecimal negativeTotal = totalDistributed.multiply(new BigDecimal("-1"));
 
-        originBudget.setApportionmentValue(originBudget.getApportionmentValue().add(negativeTotal));
-        originBudget.setProjectedValue(originBudget.getProjectedValue().add(negativeTotal));
+            originBudget.setApportionmentValue(originBudget.getApportionmentValue().add(negativeTotal));
+            originBudget.setProjectedValue(originBudget.getProjectedValue().add(negativeTotal));
 
-        for (ValueDistribution dist : distributions) {
-            UUID destinationId = dist.getDestinationId();
-            BigDecimal value = distributionValues.get(destinationId);
+            for (ValueDistribution dist : distributions) {
+                UUID destinationId = dist.getDestinationId();
+                BigDecimal value = distributionValues.get(destinationId);
 
-            Apportionment destination = apportionmentMap.get(destinationId);
-            String key = buildApportionmentKey(destination);
+                Apportionment destination = apportionmentMap.get(destinationId);
+                String key = buildApportionmentKey(destination);
 
-            BudgetOpeningCacheDTO budgetDestination = budgetOpeningMap.get(key);
-            budgetDestination.setApportionmentValue(budgetDestination.getApportionmentValue().add(value));
-            budgetDestination.setProjectedValue(budgetDestination.getProjectedValue().add(value));
+                BudgetOpeningCacheDTO budgetDestination = budgetOpeningMap.get(key);
+                budgetDestination.setApportionmentValue(budgetDestination.getApportionmentValue().add(value));
+                budgetDestination.setProjectedValue(budgetDestination.getProjectedValue().add(value));
+            }
         }
     }
 
@@ -225,6 +233,11 @@ public class ApportionmentProcessor {
     private String buildApportionmentKey(Apportionment apportionment) {
         return String.format("%s:%s:%s:%s", apportionment.getAccount(), apportionment.getCostCenter(),
                 apportionment.getBusinessUnit(), apportionment.getYearMonth());
+    }
+
+    private String buildApportionmentKeyWithCustomPeriod(Apportionment apportionment, YearMonth period) {
+        return String.format("%s:%s:%s:%s", apportionment.getAccount(), apportionment.getCostCenter(),
+                apportionment.getBusinessUnit(), period);
     }
 
     public void clearDataStructures() {
