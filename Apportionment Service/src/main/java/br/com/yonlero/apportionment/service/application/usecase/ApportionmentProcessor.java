@@ -182,8 +182,12 @@ public class ApportionmentProcessor {
             BudgetOpeningCacheDTO budgetDestination = budgetOpeningMap.get(destinationApportionment);
             BigDecimal valueToDestination = originBudgetOpening.getProjectedValue().multiply(valueToDistribution.getPercentage());
 
-            originBudgetOpening.setProjectedValue(originBudgetOpening.getProjectedValue().subtract(valueToDestination));
+            BigDecimal valueToSubtractInOrigin = valueToDestination.multiply(new BigDecimal("-1"));
+            originBudgetOpening.setApportionmentValue(originBudgetOpening.getApportionmentValue().add(valueToSubtractInOrigin));
+            originBudgetOpening.setProjectedValue(originBudgetOpening.getProjectedValue().add(valueToSubtractInOrigin));
+
             budgetDestination.setApportionmentValue(budgetDestination.getApportionmentValue().add(valueToDestination));
+            budgetDestination.setProjectedValue(budgetDestination.getProjectedValue().add(valueToDestination));
         }
 
     }
@@ -194,9 +198,9 @@ public class ApportionmentProcessor {
         inDegree.clear();
     }
 
-    public Apportionment getApportionmentFromCache(String id) {
-        return redisService.get(id);
-    }
+//    public Apportionment getApportionmentFromCache(String id) {
+//        return redisService.get(id);
+//    }
 
 //    @Transactional
 //    public Apportionment loadApportionmentFromDatabase(UUID id) {

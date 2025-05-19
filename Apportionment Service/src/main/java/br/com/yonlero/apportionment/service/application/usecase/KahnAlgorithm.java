@@ -11,13 +11,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 
-public class KahnAlgorithm {
-
-    private final Map<UUID, Set<UUID>> fullAdjacencyList;
-
-    public KahnAlgorithm(Map<UUID, Set<UUID>> fullAdjacencyList) {
-        this.fullAdjacencyList = fullAdjacencyList;
-    }
+public record KahnAlgorithm(Map<UUID, Set<UUID>> fullAdjacencyList) {
 
     public List<UUID> topologicalSort(Set<UUID> component) {
         if (component == null || component.isEmpty()) {
