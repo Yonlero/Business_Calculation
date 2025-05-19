@@ -14,7 +14,7 @@ public class MonthRangeGenerator {
         List<YearMonth> months = new ArrayList<>();
 
         if (startDate.isAfter(endDate)) {
-            throw new IllegalArgumentException("Data de início não pode ser depois da data de fim.");
+            throw new IllegalArgumentException("StartDate cannot be after endDate.");
         }
 
         YearMonth start = YearMonth.from(startDate);
