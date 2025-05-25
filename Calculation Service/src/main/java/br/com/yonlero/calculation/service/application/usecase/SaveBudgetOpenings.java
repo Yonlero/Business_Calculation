@@ -34,6 +34,5 @@ public class SaveBudgetOpenings implements SaveBudgetOpening {
     public void saveBudgetOpeningUpdatedInCacheByCalculation() {
         List<BudgetOpening> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening");
         repository.saveAll(budgetOpeningInCache.stream().map(BudgetOpeningJPA::toJPA).collect(Collectors.toList()));
-        log.info("Calculation Service - Finished");
     }
 }

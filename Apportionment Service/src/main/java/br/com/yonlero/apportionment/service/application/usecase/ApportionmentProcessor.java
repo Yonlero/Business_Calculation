@@ -159,7 +159,6 @@ public class ApportionmentProcessor {
 
         redisService.put("#calculation.budget_opening", (Serializable) budgetOpeningInCache);
         kafkaProducerPort.sendApportionmentStatusProcess(KafkaTopics.APPORTIONMENT_CALCULATION_FINISHED, null);
-        log.info("Apportionment Calculation - Finished");
     }
 
     private void groupDestinationsByOrigin(List<UUID> apportionmentGraph, Map<UUID, Set<ValueDistribution>> groupedByOrigin, Month actualMonth) {
