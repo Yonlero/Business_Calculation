@@ -55,4 +55,9 @@ public class BudgetOpeningJPA {
     public BudgetOpening toDomain() {
         return new BudgetOpening(this.id, this.yearMonth, this.account, this.costCenter, this.businessUnit, this.plannedValue, this.projectedValue, this.apportionmentValue);
     }
+
+    public static BudgetOpeningJPA toJPA(BudgetOpening budgetOpening) {
+        return new BudgetOpeningJPA(budgetOpening.getId(), budgetOpening.getYearMonth(), budgetOpening.getAccount(), budgetOpening.getCostCenter(),
+                budgetOpening.getBusinessUnit(), budgetOpening.getPlannedValue(), budgetOpening.getProjectedValue(), budgetOpening.getApportionmentValue());
+    }
 }

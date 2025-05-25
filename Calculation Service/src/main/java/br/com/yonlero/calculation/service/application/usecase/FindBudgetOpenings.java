@@ -31,7 +31,7 @@ public class FindBudgetOpenings implements FindBudgetOpening {
 
         List<BudgetOpening> budgetOpenings = new ArrayList<>(repository.findAllByYearMonthBetween(startDate, endDate).stream().map(BudgetOpeningJPA::toDomain).toList());
 
-        redisService.put("#calculation.budget_opening.toProcess", (Serializable) budgetOpenings);
+        redisService.put("#calculation.budget_opening", (Serializable) budgetOpenings);
         return budgetOpenings;
     }
 
