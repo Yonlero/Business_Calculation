@@ -6,12 +6,14 @@ import br.com.yonlero.calculation.service.infrastructure.redis.RedisService;
 import br.com.yonlero.calculation.service.infrastructure.repository.BudgetOpeningRepository;
 import br.com.yonlero.calculation.service.port.input.SaveBudgetOpening;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class SaveBudgetOpenings implements SaveBudgetOpening {
 
@@ -32,5 +34,6 @@ public class SaveBudgetOpenings implements SaveBudgetOpening {
     public void saveBudgetOpeningUpdatedInCacheByCalculation() {
         List<BudgetOpening> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening");
         repository.saveAll(budgetOpeningInCache.stream().map(BudgetOpeningJPA::toJPA).collect(Collectors.toList()));
+        log.info("Calculation Service - Finished");
     }
 }

@@ -135,12 +135,12 @@ public class ApportionmentProcessor {
         List<BudgetOpeningCacheDTO> budgetOpeningInCache = redisService.getBudgetOpenings("#calculation.budget_opening");
         List<YearMonth> periodToProcess = MonthRangeGenerator.generateYearMonths(calculationKafka.startDate(), calculationKafka.endDate());
 
-        executionOrder.parallelStream().forEach(apportionmentGraph -> {
+        executionOrder.stream().forEach(apportionmentGraph -> {
             // Each component will be processed in a local cache to avoid concurrency problems
             Map<String, BudgetOpeningCacheDTO> localBudgetMap = new HashMap<>();
 
             for (YearMonth period : periodToProcess) {
-                Map<UUID, List<ValueDistribution>> groupedByOrigin = new HashMap<>();
+                Map<UUID, Set<ValueDistribution>> groupedByOrigin = new HashMap<>();
 
                 for (BudgetOpeningCacheDTO dto : budgetOpeningInCache) {
                     localBudgetMap.put(buildBudgetKey(dto), dto);
@@ -159,22 +159,23 @@ public class ApportionmentProcessor {
 
         redisService.put("#calculation.budget_opening", (Serializable) budgetOpeningInCache);
         kafkaProducerPort.sendApportionmentStatusProcess(KafkaTopics.APPORTIONMENT_CALCULATION_FINISHED, null);
+        log.info("Apportionment Calculation - Finished");
     }
 
-    private void groupDestinationsByOrigin(List<UUID> apportionmentGraph, Map<UUID, List<ValueDistribution>> groupedByOrigin, Month actualMonth) {
+    private void groupDestinationsByOrigin(List<UUID> apportionmentGraph, Map<UUID, Set<ValueDistribution>> groupedByOrigin, Month actualMonth) {
         for (UUID id : apportionmentGraph) {
             Apportionment ap = apportionmentsById.get(id);
-
             UUID originId = Optional.ofNullable(ap.getOriginId()).orElse(ap.getId());
-            groupedByOrigin.computeIfAbsent(originId, k -> new ArrayList<>()).addAll(ap.getDistributionsForMonth(actualMonth));
+
+            groupedByOrigin.computeIfAbsent(originId, k -> new HashSet<>()).addAll(apportionmentsById.get(originId).getDistributionsForMonth(actualMonth));
         }
     }
 
-    private void processDestinationByOrigin(Map<UUID, List<ValueDistribution>> groupedByOrigin, Map<String, BudgetOpeningCacheDTO> localBudgetMap, YearMonth actualPeriod) {
-        for (Map.Entry<UUID, List<ValueDistribution>> entry : groupedByOrigin.entrySet()) {
+    private void processDestinationByOrigin(Map<UUID, Set<ValueDistribution>> groupedByOrigin, Map<String, BudgetOpeningCacheDTO> localBudgetMap, YearMonth actualPeriod) {
+        for (Map.Entry<UUID, Set<ValueDistribution>> entry : groupedByOrigin.entrySet()) {
             UUID originId = entry.getKey();
-            List<ValueDistribution> distributions = entry.getValue();
-            processGroupedApportionment(originId, distributions, apportionmentsById, localBudgetMap, actualPeriod);
+            Set<ValueDistribution> distributions = entry.getValue();
+            processGroupedApportionment(originId, distributions, localBudgetMap, actualPeriod);
         }
     }
 
@@ -184,10 +185,9 @@ public class ApportionmentProcessor {
         }
     }
 
-    private void processGroupedApportionment(UUID originId, List<ValueDistribution> distributions,
-                                             Map<UUID, Apportionment> apportionmentMap,
+    private void processGroupedApportionment(UUID originId, Set<ValueDistribution> distributions,
                                              Map<String, BudgetOpeningCacheDTO> budgetOpeningMap, YearMonth actualPeriod) {
-        Apportionment origin = apportionmentMap.get(originId);
+        Apportionment origin = apportionmentsById.get(originId);
 
         BudgetOpeningCacheDTO originBudget = budgetOpeningMap.get(buildApportionmentKeyWithCustomPeriod(origin, actualPeriod));
 
@@ -217,7 +217,7 @@ public class ApportionmentProcessor {
                 UUID destinationId = dist.getDestinationId();
                 BigDecimal value = distributionValues.get(destinationId);
 
-                Apportionment destination = apportionmentMap.get(destinationId);
+                Apportionment destination = apportionmentsById.get(destinationId);
                 String key = buildApportionmentKey(destination);
 
                 BudgetOpeningCacheDTO budgetDestination = budgetOpeningMap.get(key);
